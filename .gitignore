@@ -1,0 +1,28 @@
+# Virtuelle Python-Umgebung
+.venv/
+
+# Python-Zwischendateien
+__pycache__/
+*.py[cod]
+
+# Testdateien und Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Umgebungsvariablen und Geheimnisse
+.env
+.streamlit/secrets.toml
+
+# VS-Code-Einstellungen
+.vscode/
+
+# Lokale Dokumente
+data/documents/*
+
+# Lokale Vektordatenbank
+data/chroma/*
+
+# Betriebssystemdateien
+.DS_Store
+Thumbs.db
