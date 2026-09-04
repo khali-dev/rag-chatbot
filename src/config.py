@@ -8,6 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DOCUMENTS_DIR = DATA_DIR / "documents"
 CHROMA_DIR = DATA_DIR / "chroma"
+CHROMA_COLLECTION_NAME = "rag_documents"
 
 # Sprachmodell
 OLLAMA_MODEL = "qwen3:4b"
