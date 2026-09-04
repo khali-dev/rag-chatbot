@@ -5,3 +5,4 @@ PyMuPDF
 ollama
 python-dotenv
 pytest
+numpy

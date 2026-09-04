@@ -13,7 +13,9 @@ CHROMA_DIR = DATA_DIR / "chroma"
 OLLAMA_MODEL = "qwen3:4b"
 
 # Embedding-Modell
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_MODEL = (
+    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+)
 
 # Einstellungen für die Textaufteilung
 CHUNK_SIZE = 800
