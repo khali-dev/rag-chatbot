@@ -12,6 +12,9 @@ CHROMA_COLLECTION_NAME = "rag_documents"
 
 # Sprachmodell
 OLLAMA_MODEL = "qwen3:4b"
+# Einstellungen für die Antwortgenerierung
+LLM_TEMPERATURE = 0.1 #Bestimmt, wie kreativ oder zufällig die Antwort ist
+LLM_NUM_CTX = 4096 #Maximale Größe des Kontextfensters in Tokens
 
 # Embedding-Modell
 EMBEDDING_MODEL = (
