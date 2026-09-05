@@ -24,6 +24,10 @@ CHUNK_OVERLAP = 150
 
 # Anzahl der Suchergebnisse
 TOP_K = 4
+# Mindestähnlichkeit eines Suchergebnisses
+MIN_SIMILARITY = 0.25
+# Maximale Länge des Kontexts für das LLM
+MAX_CONTEXT_CHARS = 4000
 
 
 def create_data_directories() -> None:
