@@ -1,55 +1,44 @@
-from src.llm import generate_answer
-from src.retriever import Retriever
+from src.rag_pipeline import RAGPipeline
 
 
 def main() -> None:
-    query = input("Stelle eine Frage zum Dokument: ").strip()
+    question = input(
+        "Stelle eine Frage zum Dokument: "
+    ).strip()
 
-    if not query:
+    if not question:
         print("Die Frage darf nicht leer sein.")
         return
 
-    retriever = Retriever()
-    retrieval_response = retriever.retrieve_with_context(query)
-
-    if not retrieval_response.results:
-        print()
-        print(
-            "Es wurden keine ausreichend passenden "
-            "Dokumentstellen gefunden."
-        )
-        return
+    pipeline = RAGPipeline()
 
     print()
-    print("Erzeuge Antwort mit dem lokalen Sprachmodell ...")
+    print("Suche passende Dokumentstellen ...")
 
-    answer = generate_answer(
-        question=query,
-        context=retrieval_response.context,
-    )
+    response = pipeline.answer_question(question)
 
     print()
     print("Antwort:")
-    print(answer)
+    print(response.answer)
+
+    if not response.sources:
+        return
 
     print()
     print("Verwendete Quellen:")
 
-    for source_number, result in enumerate(
-        retrieval_response.results,
-        start=1,
-    ):
-        if result.page is None:
-            source_label = result.source
+    for source in response.sources:
+        if source.page is None:
+            source_label = source.source
         else:
             source_label = (
-                f"{result.source}, Seite {result.page}"
+                f"{source.source}, Seite {source.page}"
             )
 
         print(
-            f"[Quelle {source_number}] "
+            f"[Quelle {source.number}] "
             f"{source_label} "
-            f"(Ähnlichkeit: {result.similarity:.3f})"
+            f"(Ähnlichkeit: {source.similarity:.3f})"
         )
 
 
