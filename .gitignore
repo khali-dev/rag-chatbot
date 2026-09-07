@@ -5,7 +5,7 @@
 __pycache__/
 *.py[cod]
 
-# Testdateien und Cache
+# Tests
 .pytest_cache/
 .coverage
 htmlcov/
@@ -14,14 +14,17 @@ htmlcov/
 .env
 .streamlit/secrets.toml
 
-# VS-Code-Einstellungen
+# VS Code
 .vscode/
 
 # Lokale Dokumente
 data/documents/*
 
-# Lokale Vektordatenbank
+# Lokale ChromaDB
 data/chroma/*
+
+# Lokale Evaluationsberichte
+data/evaluation/results_*.csv
 
 # Betriebssystemdateien
 .DS_Store

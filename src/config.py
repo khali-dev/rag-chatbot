@@ -8,6 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DOCUMENTS_DIR = DATA_DIR / "documents"
 CHROMA_DIR = DATA_DIR / "chroma"
+EVALUATION_DIR = DATA_DIR / "evaluation"
 
 # ChromaDB
 CHROMA_COLLECTION_NAME = "rag_documents"
@@ -47,6 +48,11 @@ def create_data_directories() -> None:
     )
 
     CHROMA_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    EVALUATION_DIR.mkdir(
         parents=True,
         exist_ok=True,
     )

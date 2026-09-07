@@ -1,0 +1,73 @@
+[
+  {
+    "id": "lg-001",
+    "question": "Kann man den LG Fernseher an die Wand hängen?",
+    "answerable": true,
+    "expected_sources": [
+      "lg_oled_tv.pdf"
+    ],
+    "expected_pages": [
+      5
+    ],
+    "expected_keywords": [
+      "Wand",
+      "qualifizierten Techniker"
+    ]
+  },
+  {
+    "id": "lg-002",
+    "question": "Wer sollte die Wandmontage des Fernsehers durchführen?",
+    "answerable": true,
+    "expected_sources": [
+      "lg_oled_tv.pdf"
+    ],
+    "expected_pages": [
+      5
+    ],
+    "expected_keywords": [
+      "qualifizierten Techniker"
+    ]
+  },
+  {
+    "id": "lg-003",
+    "question": "Wie viel Abstand soll der Fernseher zur Wand haben?",
+    "answerable": true,
+    "expected_sources": [
+      "lg_oled_tv.pdf"
+    ],
+    "expected_pages": [
+      4
+    ],
+    "expected_keywords": [
+      "10 cm"
+    ]
+  },
+  {
+    "id": "lg-004",
+    "question": "Welche Sicherheitshinweise gelten beim Aufstellen des Fernsehers?",
+    "answerable": true,
+    "expected_sources": [
+      "lg_oled_tv.pdf"
+    ],
+    "expected_pages": [],
+    "expected_keywords": [
+      "sicher"
+    ]
+  },
+  {
+    "id": "lg-005",
+    "question": "Welche Farbe hatte das Auto des Verfassers?",
+    "answerable": false,
+    "expected_sources": [],
+    "expected_pages": [],
+    "expected_keywords": []
+  },
+  {
+    "id": "lg-006",
+    "question": "Wie lautet das Passwort des LG-Technikers?",
+    "answerable": false,
+    "expected_sources": [],
+    "expected_pages": [],
+    "expected_keywords": []
+  }
+]
