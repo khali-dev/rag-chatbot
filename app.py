@@ -4,10 +4,14 @@ from typing import Any
 import streamlit as st
 
 from src.config import (
+    DEBUG_MODE,
     DOCUMENTS_DIR,
     MAX_UPLOAD_SIZE_MB,
     OLLAMA_MODEL,
     create_data_directories,
+)
+from src.file_security import (
+    validate_uploaded_file,
 )
 from src.rag_pipeline import (
     IndexingResult,
@@ -37,46 +41,20 @@ def save_uploaded_file(
 ) -> Path:
     """Prüft und speichert eine hochgeladene Datei."""
 
-    safe_filename = Path(uploaded_file.name).name
-    extension = Path(safe_filename).suffix.lower()
-
-    if extension not in {".pdf", ".txt"}:
-        raise ValueError(
-            f"Der Dateityp '{extension}' "
-            "wird nicht unterstützt."
-        )
-
-    file_size = getattr(
-        uploaded_file,
-        "size",
-        None,
+    file_content = bytes(
+        uploaded_file.getbuffer()
     )
 
-    if file_size is None:
-        file_size = len(uploaded_file.getbuffer())
-
-    if file_size <= 0:
-        raise ValueError(
-            f"Die Datei '{safe_filename}' ist leer."
-        )
-
-    maximum_bytes = (
-        MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    safe_filename = validate_uploaded_file(
+        filename=uploaded_file.name,
+        file_content=file_content,
     )
-
-    if file_size > maximum_bytes:
-        raise ValueError(
-            f"Die Datei '{safe_filename}' ist größer "
-            f"als {MAX_UPLOAD_SIZE_MB} MB."
-        )
 
     destination = (
         DOCUMENTS_DIR / safe_filename
     )
 
-    destination.write_bytes(
-        bytes(uploaded_file.getbuffer())
-    )
+    destination.write_bytes(file_content)
 
     return destination
 
@@ -85,20 +63,28 @@ def display_error(
     action: str,
     error: Exception,
 ) -> None:
-    """Zeigt eine verständliche Fehlermeldung."""
+    """Zeigt eine sichere Fehlermeldung."""
 
-    st.error(f"{action} ist fehlgeschlagen.")
-
-    with st.expander("Technische Details"):
-        st.code(
-            f"{type(error).__name__}: {error}"
+    if isinstance(error, ValueError):
+        st.error(f"{action}: {error}")
+    else:
+        st.error(
+            f"{action} ist fehlgeschlagen."
         )
+
+    if DEBUG_MODE:
+        with st.expander(
+            "Technische Details"
+        ):
+            st.code(
+                f"{type(error).__name__}: {error}"
+            )
 
 
 def render_sources(
     sources: tuple[RAGSource, ...],
 ) -> None:
-    """Zeigt die Quellen einer Antwort."""
+    """Zeigt die verwendeten Quellen."""
 
     if not sources:
         return
@@ -132,7 +118,7 @@ def render_sources(
 
 
 def initialize_session_state() -> None:
-    """Initialisiert den Zustand der Anwendung."""
+    """Initialisiert den Anwendungszustand."""
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -157,7 +143,7 @@ def render_chat_history() -> None:
 def render_indexing_result(
     result: IndexingResult,
 ) -> None:
-    """Zeigt das Ergebnis der letzten Indexierung."""
+    """Zeigt das letzte Indexierungsergebnis."""
 
     st.success(
         f"{result.indexed_documents} "
@@ -174,7 +160,6 @@ pipeline = get_pipeline()
 initialize_session_state()
 
 
-# Seitenleiste
 with st.sidebar:
     st.header("Dokumente")
 
@@ -198,7 +183,9 @@ with st.sidebar:
         st.write("Ausgewählte Dateien:")
 
         for uploaded_file in uploaded_files:
-            st.write(f"• {uploaded_file.name}")
+            st.write(
+                f"• {uploaded_file.name}"
+            )
 
     index_button = st.button(
         "Dokumente indexieren",
@@ -212,7 +199,8 @@ with st.sidebar:
 
         try:
             with st.spinner(
-                "Dokumente werden verarbeitet ..."
+                "Dokumente werden geprüft "
+                "und verarbeitet ..."
             ):
                 saved_paths = [
                     save_uploaded_file(uploaded_file)
@@ -275,8 +263,12 @@ with st.sidebar:
         f"Lokales Sprachmodell: {OLLAMA_MODEL}"
     )
 
+    if DEBUG_MODE:
+        st.caption(
+            "Entwicklungsmodus ist aktiviert."
+        )
 
-# Hauptbereich
+
 st.title("📚 RAG Document Assistant")
 
 st.write(

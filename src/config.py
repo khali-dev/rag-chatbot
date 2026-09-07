@@ -1,4 +1,10 @@
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 
 # Hauptverzeichnis des Projekts
@@ -20,6 +26,8 @@ OLLAMA_MODEL = "qwen3:4b"
 LLM_TEMPERATURE = 0.1
 LLM_NUM_CTX = 4096
 OLLAMA_KEEP_ALIVE = "10m"
+
+# Optionales vollständiges GPU-Offloading
 OLLAMA_NUM_GPU_LAYERS = 36
 
 # Embedding-Modell
@@ -28,7 +36,6 @@ EMBEDDING_MODEL = (
     "paraphrase-multilingual-MiniLM-L12-v2"
 )
 
-# Anzahl Texte pro Embedding-Durchlauf
 EMBEDDING_BATCH_SIZE = 32
 
 # Textaufteilung
@@ -42,6 +49,14 @@ MAX_CONTEXT_CHARS = 4000
 
 # Datei-Upload
 MAX_UPLOAD_SIZE_MB = 20
+
+# Technische Fehlerdetails
+DEBUG_MODE = (
+    os.getenv("RAG_DEBUG", "false")
+    .strip()
+    .casefold()
+    in {"1", "true", "yes", "ja"}
+)
 
 
 def create_data_directories() -> None:

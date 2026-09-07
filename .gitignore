@@ -26,6 +26,9 @@ data/chroma/*
 # Lokale Evaluationsberichte
 data/evaluation/results_*.csv
 
+# Protokolldateien
+*.log
+
 # Betriebssystemdateien
 .DS_Store
 Thumbs.db
