@@ -59,7 +59,7 @@ def test_empty_response_raises_error() -> None:
         }
     }
 
-    with pytest.raises(RuntimeError, match="keinen gültigen"):
+    with pytest.raises(RuntimeError, match="Ollama hat keinen endgültigen Antworttext zurückgegeben."):
         extract_response_content(response)
 
 
@@ -107,3 +107,5 @@ def test_negative_temperature_raises_error() -> None:
             context="[Quelle 1] Ein Kontext.",
             temperature=-0.1,
         )
+
+
