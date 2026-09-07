@@ -47,7 +47,7 @@ class VectorStore:
         self.collection = self._get_or_create_collection()
 
     def _get_or_create_collection(self) -> Any:
-        """Lädt die Collection oder erstellt sie bei Bedarf."""
+        """Lädt die Collection oder erstellt sie."""
 
         return self.client.get_or_create_collection(
             name=self.collection_name,
@@ -55,34 +55,62 @@ class VectorStore:
         )
 
     def count(self) -> int:
-        """Gibt die Anzahl der gespeicherten Chunks zurück."""
+        """Gibt die Anzahl gespeicherter Chunks zurück."""
 
         return self.collection.count()
+
+    def list_sources(self) -> list[str]:
+        """Gibt die Namen aller indexierten Dokumente zurück."""
+
+        if self.count() == 0:
+            return []
+
+        collection_data = self.collection.get(
+            include=["metadatas"]
+        )
+
+        metadata_entries = (
+            collection_data.get("metadatas") or []
+        )
+
+        sources = {
+            str(metadata["source"])
+            for metadata in metadata_entries
+            if metadata and "source" in metadata
+        }
+
+        return sorted(sources)
 
     def add_chunks(
         self,
         chunks: Sequence[DocumentChunk],
         embeddings: Sequence[Sequence[float]],
     ) -> None:
-        """Speichert Chunks und ihre Embeddings in ChromaDB."""
+        """Speichert Chunks und Embeddings in ChromaDB."""
 
         if not chunks and not embeddings:
             return
 
         if len(chunks) != len(embeddings):
             raise ValueError(
-                "Die Anzahl der Chunks und Embeddings muss gleich groß sein."
+                "Die Anzahl der Chunks und Embeddings "
+                "muss gleich groß sein."
             )
 
         if any(not embedding for embedding in embeddings):
-            raise ValueError("Embeddings dürfen nicht leer sein.")
+            raise ValueError(
+                "Embeddings dürfen nicht leer sein."
+            )
 
         ids: list[str] = []
         documents: list[str] = []
         metadata_list: list[dict[str, str | int]] = []
         embedding_list: list[list[float]] = []
 
-        for chunk, embedding in zip(chunks, embeddings):
+        for chunk, embedding in zip(
+            chunks,
+            embeddings,
+        ):
             metadata: dict[str, str | int] = {
                 "source": chunk.source,
                 "chunk_index": chunk.chunk_index,
@@ -108,14 +136,17 @@ class VectorStore:
         query_embedding: Sequence[float],
         number_of_results: int = TOP_K,
     ) -> list[SearchResult]:
-        """Sucht die ähnlichsten Chunks zu einem Frage-Embedding."""
+        """Sucht die ähnlichsten Chunks."""
 
         if not query_embedding:
-            raise ValueError("Das Frage-Embedding darf nicht leer sein.")
+            raise ValueError(
+                "Das Frage-Embedding darf nicht leer sein."
+            )
 
         if number_of_results <= 0:
             raise ValueError(
-                "Die Anzahl der Suchergebnisse muss größer als 0 sein."
+                "Die Anzahl der Suchergebnisse "
+                "muss größer als 0 sein."
             )
 
         stored_count = self.count()
@@ -123,12 +154,19 @@ class VectorStore:
         if stored_count == 0:
             return []
 
-        result_count = min(number_of_results, stored_count)
+        result_count = min(
+            number_of_results,
+            stored_count,
+        )
 
         query_result = self.collection.query(
             query_embeddings=[list(query_embedding)],
             n_results=result_count,
-            include=["documents", "metadatas", "distances"],
+            include=[
+                "documents",
+                "metadatas",
+                "distances",
+            ],
         )
 
         ids = query_result["ids"][0]
@@ -160,7 +198,9 @@ class VectorStore:
                     text=text,
                     source=str(metadata["source"]),
                     page=page,
-                    chunk_index=int(metadata["chunk_index"]),
+                    chunk_index=int(
+                        metadata["chunk_index"]
+                    ),
                     distance=numeric_distance,
                     similarity=1.0 - numeric_distance,
                 )
@@ -168,23 +208,30 @@ class VectorStore:
 
         return search_results
 
-    def delete_document(self, source: str) -> None:
-        """Löscht alle Chunks eines bestimmten Dokuments."""
+    def delete_document(
+        self,
+        source: str,
+    ) -> None:
+        """Löscht alle Chunks eines Dokuments."""
 
         cleaned_source = source.strip()
 
         if not cleaned_source:
-            raise ValueError("Der Dateiname darf nicht leer sein.")
+            raise ValueError(
+                "Der Dateiname darf nicht leer sein."
+            )
 
         self.collection.delete(
             where={"source": cleaned_source}
         )
 
     def reset(self) -> None:
-        """Löscht die Collection und erstellt eine leere neu."""
+        """Löscht die Collection und erstellt sie neu."""
 
         self.client.delete_collection(
             name=self.collection_name
         )
 
-        self.collection = self._get_or_create_collection()
+        self.collection = (
+            self._get_or_create_collection()
+        )

@@ -16,6 +16,6 @@ def test_streamlit_app_starts() -> None:
     assert not app.exception
     assert len(app.title) == 1
     assert app.title[0].value == (
-        "RAG Document Assistant"
+        "📚 RAG Document Assistant"
     )
     assert len(app.chat_input) == 1

@@ -5,14 +5,20 @@ import streamlit as st
 
 from src.config import (
     DOCUMENTS_DIR,
+    MAX_UPLOAD_SIZE_MB,
     OLLAMA_MODEL,
     create_data_directories,
 )
-from src.rag_pipeline import RAGPipeline, RAGSource
+from src.rag_pipeline import (
+    IndexingResult,
+    RAGPipeline,
+    RAGSource,
+)
 
 
 st.set_page_config(
     page_title="RAG Document Assistant",
+    page_icon="📚",
     layout="wide",
 )
 
@@ -21,23 +27,53 @@ create_data_directories()
 
 @st.cache_resource(show_spinner=False)
 def get_pipeline() -> RAGPipeline:
-    """Erstellt eine Pipeline und verwendet sie bei erneuten Aufrufen weiter."""
+    """Erstellt und speichert die RAG-Pipeline."""
 
     return RAGPipeline()
 
 
-def save_uploaded_file(uploaded_file: Any) -> Path:
-    """Speichert eine hochgeladene Datei im Dokumentordner."""
+def save_uploaded_file(
+    uploaded_file: Any,
+) -> Path:
+    """Prüft und speichert eine hochgeladene Datei."""
 
     safe_filename = Path(uploaded_file.name).name
     extension = Path(safe_filename).suffix.lower()
 
     if extension not in {".pdf", ".txt"}:
         raise ValueError(
-            f"Nicht unterstützter Dateityp: {extension}"
+            f"Der Dateityp '{extension}' "
+            "wird nicht unterstützt."
         )
 
-    destination = DOCUMENTS_DIR / safe_filename
+    file_size = getattr(
+        uploaded_file,
+        "size",
+        None,
+    )
+
+    if file_size is None:
+        file_size = len(uploaded_file.getbuffer())
+
+    if file_size <= 0:
+        raise ValueError(
+            f"Die Datei '{safe_filename}' ist leer."
+        )
+
+    maximum_bytes = (
+        MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    )
+
+    if file_size > maximum_bytes:
+        raise ValueError(
+            f"Die Datei '{safe_filename}' ist größer "
+            f"als {MAX_UPLOAD_SIZE_MB} MB."
+        )
+
+    destination = (
+        DOCUMENTS_DIR / safe_filename
+    )
+
     destination.write_bytes(
         bytes(uploaded_file.getbuffer())
     )
@@ -45,10 +81,24 @@ def save_uploaded_file(uploaded_file: Any) -> Path:
     return destination
 
 
+def display_error(
+    action: str,
+    error: Exception,
+) -> None:
+    """Zeigt eine verständliche Fehlermeldung."""
+
+    st.error(f"{action} ist fehlgeschlagen.")
+
+    with st.expander("Technische Details"):
+        st.code(
+            f"{type(error).__name__}: {error}"
+        )
+
+
 def render_sources(
     sources: tuple[RAGSource, ...],
 ) -> None:
-    """Zeigt die Quellen einer Antwort an."""
+    """Zeigt die Quellen einer Antwort."""
 
     if not sources:
         return
@@ -56,12 +106,13 @@ def render_sources(
     with st.expander(
         f"Verwendete Quellen ({len(sources)})"
     ):
-        for source in sources:
+        for position, source in enumerate(sources):
             if source.page is None:
                 source_label = source.source
             else:
                 source_label = (
-                    f"{source.source}, Seite {source.page}"
+                    f"{source.source}, "
+                    f"Seite {source.page}"
                 )
 
             st.markdown(
@@ -70,24 +121,28 @@ def render_sources(
             )
 
             st.caption(
-                f"Ähnlichkeit: {source.similarity:.3f}"
+                "Semantische Ähnlichkeit: "
+                f"{source.similarity:.3f}"
             )
 
             st.write(source.text)
 
-            if source.number < len(sources):
+            if position < len(sources) - 1:
                 st.divider()
 
 
 def initialize_session_state() -> None:
-    """Initialisiert den Chatverlauf."""
+    """Initialisiert den Zustand der Anwendung."""
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
+    if "last_indexing_result" not in st.session_state:
+        st.session_state.last_indexing_result = None
+
 
 def render_chat_history() -> None:
-    """Zeigt alle bisherigen Chatnachrichten an."""
+    """Zeigt den bisherigen Chatverlauf."""
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -97,6 +152,22 @@ def render_chat_history() -> None:
                 render_sources(
                     message.get("sources", ())
                 )
+
+
+def render_indexing_result(
+    result: IndexingResult,
+) -> None:
+    """Zeigt das Ergebnis der letzten Indexierung."""
+
+    st.success(
+        f"{result.indexed_documents} "
+        f"Dokument(e) wurden zuletzt indexiert."
+    )
+
+    st.caption(
+        f"{result.loaded_pages} Seiten · "
+        f"{result.created_chunks} Chunks"
+    )
 
 
 pipeline = get_pipeline()
@@ -112,6 +183,11 @@ with st.sidebar:
         "indexiere sie für die Suche."
     )
 
+    st.caption(
+        f"Maximale Dateigröße: "
+        f"{MAX_UPLOAD_SIZE_MB} MB"
+    )
+
     uploaded_files = st.file_uploader(
         "Dokumente auswählen",
         type=["pdf", "txt"],
@@ -122,7 +198,7 @@ with st.sidebar:
         st.write("Ausgewählte Dateien:")
 
         for uploaded_file in uploaded_files:
-            st.write(f"- {uploaded_file.name}")
+            st.write(f"• {uploaded_file.name}")
 
     index_button = st.button(
         "Dokumente indexieren",
@@ -132,6 +208,8 @@ with st.sidebar:
     )
 
     if index_button:
+        st.session_state.last_indexing_result = None
+
         try:
             with st.spinner(
                 "Dokumente werden verarbeitet ..."
@@ -142,35 +220,49 @@ with st.sidebar:
                 ]
 
                 indexing_result = (
-                    pipeline.index_documents(saved_paths)
+                    pipeline.index_documents(
+                        saved_paths
+                    )
                 )
 
-            st.success(
-                f"{indexing_result.indexed_documents} "
-                f"Dokument(e) erfolgreich indexiert."
-            )
-
-            st.write(
-                f"Geladene Seiten: "
-                f"{indexing_result.loaded_pages}"
-            )
-
-            st.write(
-                f"Erstellte Chunks: "
-                f"{indexing_result.created_chunks}"
-            )
+                st.session_state.last_indexing_result = (
+                    indexing_result
+                )
 
         except Exception as exc:
-            st.error(
-                f"Die Indexierung ist fehlgeschlagen: {exc}"
+            display_error(
+                "Die Indexierung",
+                exc,
             )
 
+    last_result = (
+        st.session_state.last_indexing_result
+    )
+
+    if last_result is not None:
+        render_indexing_result(last_result)
+
     st.divider()
+    st.subheader("Indexierte Dokumente")
+
+    indexed_sources = (
+        pipeline.vector_store.list_sources()
+    )
+
+    if indexed_sources:
+        for source_name in indexed_sources:
+            st.write(f"• {source_name}")
+    else:
+        st.caption(
+            "Noch keine Dokumente indexiert."
+        )
 
     st.metric(
         "Gespeicherte Chunks",
         pipeline.vector_store.count(),
     )
+
+    st.divider()
 
     if st.button(
         "Chatverlauf löschen",
@@ -185,7 +277,7 @@ with st.sidebar:
 
 
 # Hauptbereich
-st.title("RAG Document Assistant")
+st.title("📚 RAG Document Assistant")
 
 st.write(
     "Stelle Fragen zu deinen indexierten "
@@ -197,7 +289,8 @@ stored_chunks = pipeline.vector_store.count()
 if stored_chunks == 0:
     st.warning(
         "Es sind noch keine Dokumente indexiert. "
-        "Lade zuerst ein Dokument über die Seitenleiste hoch."
+        "Lade zuerst ein Dokument über die "
+        "Seitenleiste hoch."
     )
 else:
     st.success(
@@ -210,7 +303,8 @@ render_chat_history()
 
 
 question = st.chat_input(
-    "Stelle eine Frage zu deinen Dokumenten ..."
+    "Stelle eine Frage zu deinen Dokumenten ...",
+    disabled=stored_chunks == 0,
 )
 
 if question:
@@ -227,10 +321,13 @@ if question:
     with st.chat_message("assistant"):
         try:
             with st.spinner(
-                "Suche Dokumentstellen und erzeuge Antwort ..."
+                "Suche Dokumentstellen und "
+                "erzeuge Antwort ..."
             ):
-                response = pipeline.answer_question(
-                    question
+                response = (
+                    pipeline.answer_question(
+                        question
+                    )
                 )
 
             st.markdown(response.answer)
@@ -245,17 +342,7 @@ if question:
             )
 
         except Exception as exc:
-            error_message = (
-                f"Bei der Verarbeitung ist ein Fehler "
-                f"aufgetreten: {exc}"
-            )
-
-            st.error(error_message)
-
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": error_message,
-                    "sources": (),
-                }
+            display_error(
+                "Die Beantwortung der Frage",
+                exc,
             )

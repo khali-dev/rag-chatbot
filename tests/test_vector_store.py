@@ -9,6 +9,8 @@ from src.vector_store import VectorStore
 
 @pytest.fixture
 def vector_store() -> VectorStore:
+    """Erstellt eine temporäre Testdatenbank."""
+
     client = chromadb.EphemeralClient()
 
     return VectorStore(
@@ -24,6 +26,8 @@ def create_test_chunk(
     page: int | None = 1,
     chunk_index: int = 0,
 ) -> DocumentChunk:
+    """Erstellt einen Chunk für die Tests."""
+
     return DocumentChunk(
         text=text,
         source=source,
@@ -44,7 +48,10 @@ def test_add_chunk(
 ) -> None:
     chunk = create_test_chunk(
         chunk_id="chunk-1",
-        text="Cloud Computing stellt IT-Ressourcen bereit.",
+        text=(
+            "Cloud Computing stellt "
+            "IT-Ressourcen bereit."
+        ),
     )
 
     vector_store.add_chunks(
@@ -81,18 +88,27 @@ def test_search_returns_most_similar_chunk(
 ) -> None:
     cloud_chunk = create_test_chunk(
         chunk_id="cloud",
-        text="Cloud Computing stellt Server bereit.",
+        text=(
+            "Cloud Computing stellt "
+            "Server bereit."
+        ),
         source="cloud.pdf",
     )
 
     cooking_chunk = create_test_chunk(
         chunk_id="cooking",
-        text="Ein Kuchen wird im Backofen gebacken.",
+        text=(
+            "Ein Kuchen wird im "
+            "Backofen gebacken."
+        ),
         source="cooking.pdf",
     )
 
     vector_store.add_chunks(
-        chunks=[cloud_chunk, cooking_chunk],
+        chunks=[
+            cloud_chunk,
+            cooking_chunk,
+        ],
         embeddings=[
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
@@ -140,7 +156,10 @@ def test_different_lengths_raise_error(
         text="Ein Dokumenttext.",
     )
 
-    with pytest.raises(ValueError, match="gleich groß"):
+    with pytest.raises(
+        ValueError,
+        match="gleich groß",
+    ):
         vector_store.add_chunks(
             chunks=[chunk],
             embeddings=[],
@@ -173,16 +192,71 @@ def test_delete_document(
     )
 
     vector_store.add_chunks(
-        chunks=[first_chunk, second_chunk],
+        chunks=[
+            first_chunk,
+            second_chunk,
+        ],
         embeddings=[
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
         ],
     )
 
-    vector_store.delete_document("first.pdf")
+    vector_store.delete_document(
+        "first.pdf"
+    )
 
     assert vector_store.count() == 1
+    assert vector_store.list_sources() == [
+        "second.pdf"
+    ]
+
+
+def test_list_sources(
+    vector_store: VectorStore,
+) -> None:
+    first_chunk = create_test_chunk(
+        chunk_id="first",
+        text="Erstes Dokument.",
+        source="first.pdf",
+    )
+
+    second_chunk = create_test_chunk(
+        chunk_id="second",
+        text="Zweites Dokument.",
+        source="second.pdf",
+    )
+
+    third_chunk = create_test_chunk(
+        chunk_id="third",
+        text="Weiterer Abschnitt.",
+        source="first.pdf",
+        chunk_index=1,
+    )
+
+    vector_store.add_chunks(
+        chunks=[
+            first_chunk,
+            second_chunk,
+            third_chunk,
+        ],
+        embeddings=[
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.8, 0.2, 0.0],
+        ],
+    )
+
+    assert vector_store.list_sources() == [
+        "first.pdf",
+        "second.pdf",
+    ]
+
+
+def test_empty_store_has_no_sources(
+    vector_store: VectorStore,
+) -> None:
+    assert vector_store.list_sources() == []
 
 
 def test_reset_removes_all_chunks(
@@ -201,3 +275,4 @@ def test_reset_removes_all_chunks(
     vector_store.reset()
 
     assert vector_store.count() == 0
+    assert vector_store.list_sources() == []
