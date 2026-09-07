@@ -19,6 +19,8 @@ OLLAMA_MODEL = "qwen3:4b"
 # Einstellungen für die Antwortgenerierung
 LLM_TEMPERATURE = 0.1
 LLM_NUM_CTX = 4096
+OLLAMA_KEEP_ALIVE = "10m"
+OLLAMA_NUM_GPU_LAYERS = 36
 
 # Embedding-Modell
 EMBEDDING_MODEL = (
@@ -26,12 +28,15 @@ EMBEDDING_MODEL = (
     "paraphrase-multilingual-MiniLM-L12-v2"
 )
 
+# Anzahl Texte pro Embedding-Durchlauf
+EMBEDDING_BATCH_SIZE = 32
+
 # Textaufteilung
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 
 # Retrieval
-TOP_K = 4
+TOP_K = 3
 MIN_SIMILARITY = 0.25
 MAX_CONTEXT_CHARS = 4000
 

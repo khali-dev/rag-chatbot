@@ -4,15 +4,20 @@ from functools import lru_cache
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from src.config import EMBEDDING_MODEL
+from src.config import (
+    EMBEDDING_BATCH_SIZE,
+    EMBEDDING_MODEL,
+)
 from src.text_splitter import DocumentChunk
 
 
 @lru_cache(maxsize=1)
 def get_embedding_model() -> SentenceTransformer:
-    """Lädt das Embedding-Modell und hält es im Arbeitsspeicher."""
+    """Lädt und speichert das Embedding-Modell."""
 
-    return SentenceTransformer(EMBEDDING_MODEL)
+    return SentenceTransformer(
+        EMBEDDING_MODEL
+    )
 
 
 def create_embeddings(
@@ -23,15 +28,31 @@ def create_embeddings(
     if not texts:
         return []
 
-    cleaned_texts = [text.strip() for text in texts]
+    if EMBEDDING_BATCH_SIZE <= 0:
+        raise ValueError(
+            "Die Embedding-Batch-Größe "
+            "muss größer als 0 sein."
+        )
 
-    if any(not text for text in cleaned_texts):
-        raise ValueError("Leere Texte können nicht eingebettet werden.")
+    cleaned_texts = [
+        text.strip()
+        for text in texts
+    ]
+
+    if any(
+        not text
+        for text in cleaned_texts
+    ):
+        raise ValueError(
+            "Leere Texte können nicht "
+            "eingebettet werden."
+        )
 
     model = get_embedding_model()
 
     embedding_matrix = model.encode(
         cleaned_texts,
+        batch_size=EMBEDDING_BATCH_SIZE,
         convert_to_numpy=True,
         normalize_embeddings=True,
         show_progress_bar=False,
@@ -40,23 +61,33 @@ def create_embeddings(
     return embedding_matrix.tolist()
 
 
-def create_query_embedding(query: str) -> list[float]:
-    """Erzeugt ein Embedding für eine einzelne Nutzerfrage."""
+def create_query_embedding(
+    query: str,
+) -> list[float]:
+    """Erzeugt ein Embedding für eine Nutzerfrage."""
 
     cleaned_query = query.strip()
 
     if not cleaned_query:
-        raise ValueError("Die Frage darf nicht leer sein.")
+        raise ValueError(
+            "Die Frage darf nicht leer sein."
+        )
 
-    return create_embeddings([cleaned_query])[0]
+    return create_embeddings(
+        [cleaned_query]
+    )[0]
 
 
 def create_chunk_embeddings(
     chunks: Sequence[DocumentChunk],
 ) -> list[list[float]]:
-    """Erzeugt für jeden Dokument-Chunk ein Embedding."""
+    """Erzeugt Embeddings für Dokument-Chunks."""
 
-    chunk_texts = [chunk.text for chunk in chunks]
+    chunk_texts = [
+        chunk.text
+        for chunk in chunks
+    ]
+
     return create_embeddings(chunk_texts)
 
 
@@ -64,29 +95,62 @@ def cosine_similarity(
     first_embedding: Sequence[float],
     second_embedding: Sequence[float],
 ) -> float:
-    """Berechnet die Kosinus-Ähnlichkeit zweier Embeddings."""
+    """Berechnet die Kosinus-Ähnlichkeit."""
 
-    first_vector = np.asarray(first_embedding, dtype=np.float32)
-    second_vector = np.asarray(second_embedding, dtype=np.float32)
+    first_vector = np.asarray(
+        first_embedding,
+        dtype=np.float32,
+    )
 
-    if first_vector.ndim != 1 or second_vector.ndim != 1:
-        raise ValueError("Beide Embeddings müssen eindimensional sein.")
+    second_vector = np.asarray(
+        second_embedding,
+        dtype=np.float32,
+    )
 
-    if first_vector.size == 0 or second_vector.size == 0:
-        raise ValueError("Embeddings dürfen nicht leer sein.")
+    if (
+        first_vector.ndim != 1
+        or second_vector.ndim != 1
+    ):
+        raise ValueError(
+            "Beide Embeddings müssen "
+            "eindimensional sein."
+        )
+
+    if (
+        first_vector.size == 0
+        or second_vector.size == 0
+    ):
+        raise ValueError(
+            "Embeddings dürfen nicht leer sein."
+        )
 
     if first_vector.shape != second_vector.shape:
         raise ValueError(
-            "Die Embeddings müssen dieselbe Dimension besitzen."
+            "Die Embeddings müssen dieselbe "
+            "Dimension besitzen."
         )
 
-    first_norm = np.linalg.norm(first_vector)
-    second_norm = np.linalg.norm(second_vector)
+    first_norm = np.linalg.norm(
+        first_vector
+    )
+
+    second_norm = np.linalg.norm(
+        second_vector
+    )
 
     if first_norm == 0 or second_norm == 0:
-        raise ValueError("Ein Nullvektor besitzt keine definierte Ähnlichkeit.")
+        raise ValueError(
+            "Ein Nullvektor besitzt keine "
+            "definierte Ähnlichkeit."
+        )
 
-    similarity = np.dot(first_vector, second_vector)
-    similarity /= first_norm * second_norm
+    similarity = np.dot(
+        first_vector,
+        second_vector,
+    )
+
+    similarity /= (
+        first_norm * second_norm
+    )
 
     return float(similarity)
