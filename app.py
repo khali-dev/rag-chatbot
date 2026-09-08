@@ -11,7 +11,6 @@ from src.config import (
     DOCUMENTS_DIR,
     GEMINI_MODEL,
     LLM_PROVIDER,
-    MAX_QUESTIONS_PER_SESSION,
     MAX_UPLOAD_SIZE_MB,
     OLLAMA_MODEL,
     create_data_directories,
@@ -66,9 +65,6 @@ def initialize_session_state() -> None:
     if "last_indexing_result" not in st.session_state:
         st.session_state.last_indexing_result = None
 
-    if "questions_asked" not in st.session_state:
-        st.session_state.questions_asked = 0
-
     if "session_identifier" not in st.session_state:
         st.session_state.session_identifier = (
             uuid4().hex
@@ -79,7 +75,7 @@ def initialize_session_state() -> None:
 
 
 def get_session_api_key() -> str:
-    """Gibt den API-Schlüssel der aktuellen Sitzung zurück."""
+    """Gibt den API-Schlüssel der Sitzung zurück."""
 
     api_key = st.session_state.get(
         "gemini_api_key",
@@ -347,7 +343,6 @@ def reset_cloud_session() -> None:
     st.session_state.gemini_api_key = ""
     st.session_state.messages = []
     st.session_state.last_indexing_result = None
-    st.session_state.questions_asked = 0
     st.session_state.session_identifier = uuid4().hex
 
     if "cloud_pipeline" in st.session_state:
@@ -505,18 +500,6 @@ with st.sidebar:
         pipeline.vector_store.count(),
     )
 
-    if is_cloud_mode():
-        remaining_questions = max(
-            0,
-            MAX_QUESTIONS_PER_SESSION
-            - st.session_state.questions_asked,
-        )
-
-        st.metric(
-            "Verbleibende Fragen",
-            remaining_questions,
-        )
-
     st.divider()
 
     if st.button(
@@ -557,12 +540,6 @@ api_key_missing = (
     and not has_session_api_key()
 )
 
-question_limit_reached = (
-    is_cloud_mode()
-    and st.session_state.questions_asked
-    >= MAX_QUESTIONS_PER_SESSION
-)
-
 if stored_chunks == 0:
     st.warning(
         "Es sind noch keine Dokumente indexiert. "
@@ -582,12 +559,6 @@ if api_key_missing:
         "stellen zu können."
     )
 
-if question_limit_reached:
-    st.warning(
-        "Das Fragenlimit dieser Sitzung wurde "
-        "erreicht."
-    )
-
 
 render_chat_history()
 
@@ -597,7 +568,6 @@ question = st.chat_input(
     disabled=(
         stored_chunks == 0
         or api_key_missing
-        or question_limit_reached
     ),
 )
 
@@ -614,9 +584,6 @@ if question:
 
     with st.chat_message("assistant"):
         try:
-            if is_cloud_mode():
-                st.session_state.questions_asked += 1
-
             with st.spinner(
                 "Suche Dokumentstellen und "
                 "erzeuge Antwort ..."

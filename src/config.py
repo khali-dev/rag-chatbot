@@ -7,32 +7,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def read_positive_integer(
-    variable_name: str,
-    default: int,
-) -> int:
-    """Liest eine positive Ganzzahl aus der Umgebung."""
-
-    raw_value = os.getenv(
-        variable_name,
-        str(default),
-    ).strip()
-
-    try:
-        value = int(raw_value)
-    except ValueError as exc:
-        raise ValueError(
-            f"{variable_name} muss eine Ganzzahl sein."
-        ) from exc
-
-    if value <= 0:
-        raise ValueError(
-            f"{variable_name} muss größer als 0 sein."
-        )
-
-    return value
-
-
 # Hauptverzeichnis des Projekts
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -72,8 +46,8 @@ GEMINI_MODEL = os.getenv(
 ).strip()
 
 # Optionaler lokaler Gemini-Schlüssel.
-# In der öffentlichen App wird stattdessen der vom
-# jeweiligen Besucher eingegebene Schlüssel verwendet.
+# In der öffentlichen App wird der vom jeweiligen
+# Besucher eingegebene Schlüssel verwendet.
 GEMINI_API_KEY = os.getenv(
     "GEMINI_API_KEY",
     "",
@@ -106,12 +80,6 @@ MAX_CONTEXT_CHARS = 4000
 
 # Datei-Upload
 MAX_UPLOAD_SIZE_MB = 20
-
-# Begrenzung der Cloud-Ressourcennutzung pro Sitzung
-MAX_QUESTIONS_PER_SESSION = read_positive_integer(
-    "MAX_QUESTIONS_PER_SESSION",
-    20,
-)
 
 # Technische Fehlerdetails
 DEBUG_MODE = (
