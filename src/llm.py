@@ -140,7 +140,7 @@ def remove_thinking_content(
     return cleaned_content.strip()
 
 
-def extract_ollama_response_content(
+def extract_response_content(
     response: Any,
 ) -> str:
     """Liest die endgültige Ollama-Antwort."""
@@ -218,7 +218,7 @@ def generate_ollama_answer(
     model: str,
     temperature: float,
 ) -> str:
-    """Erzeugt eine Antwort mit dem lokalen Ollama-Modell."""
+    """Erzeugt eine Antwort mit Ollama."""
 
     messages = build_messages(
         question=question,
@@ -250,7 +250,7 @@ def generate_ollama_answer(
             "Ollama konnte keine Antwort erzeugen."
         ) from exc
 
-    return extract_ollama_response_content(
+    return extract_response_content(
         response
     )
 
@@ -260,13 +260,19 @@ def generate_gemini_answer(
     context: str,
     model: str,
     temperature: float,
+    api_key: str | None = None,
 ) -> str:
     """Erzeugt eine Antwort über die Gemini API."""
 
-    if not GEMINI_API_KEY:
+    if api_key is None:
+        selected_api_key = GEMINI_API_KEY
+    else:
+        selected_api_key = api_key.strip()
+
+    if not selected_api_key:
         raise RuntimeError(
-            "Der Gemini-API-Schlüssel fehlt. "
-            "Setze GEMINI_API_KEY in der Umgebung."
+            "Es wurde kein Gemini-API-Schlüssel "
+            "für diese Sitzung angegeben."
         )
 
     user_prompt = build_user_prompt(
@@ -276,7 +282,7 @@ def generate_gemini_answer(
 
     try:
         client = genai.Client(
-            api_key=GEMINI_API_KEY
+            api_key=selected_api_key
         )
 
         response = client.models.generate_content(
@@ -291,8 +297,8 @@ def generate_gemini_answer(
     except Exception as exc:
         raise RuntimeError(
             "Gemini konnte keine Antwort erzeugen. "
-            "Prüfe den API-Schlüssel, die "
-            "Internetverbindung und das kostenlose "
+            "Prüfe deinen API-Schlüssel, die "
+            "Internetverbindung und dein "
             "API-Kontingent."
         ) from exc
 
@@ -306,6 +312,7 @@ def generate_answer(
     context: str,
     model: str | None = None,
     temperature: float = LLM_TEMPERATURE,
+    api_key: str | None = None,
 ) -> str:
     """Erzeugt eine Antwort mit dem gewählten Anbieter."""
 
@@ -346,6 +353,7 @@ def generate_answer(
             context=context,
             model=selected_model,
             temperature=temperature,
+            api_key=api_key,
         )
 
     raise RuntimeError(

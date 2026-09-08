@@ -68,9 +68,12 @@ OLLAMA_MODEL = os.getenv(
 # Cloud-Sprachmodell
 GEMINI_MODEL = os.getenv(
     "GEMINI_MODEL",
-    "gemini-2.5-flash-lite",
+    "gemini-3.5-flash-lite",
 ).strip()
 
+# Optionaler lokaler Gemini-Schlüssel.
+# In der öffentlichen App wird stattdessen der vom
+# jeweiligen Besucher eingegebene Schlüssel verwendet.
 GEMINI_API_KEY = os.getenv(
     "GEMINI_API_KEY",
     "",
@@ -104,7 +107,7 @@ MAX_CONTEXT_CHARS = 4000
 # Datei-Upload
 MAX_UPLOAD_SIZE_MB = 20
 
-# Schutz des kostenlosen Cloud-Kontingents
+# Begrenzung der Cloud-Ressourcennutzung pro Sitzung
 MAX_QUESTIONS_PER_SESSION = read_positive_integer(
     "MAX_QUESTIONS_PER_SESSION",
     20,
@@ -120,7 +123,7 @@ DEBUG_MODE = (
 
 
 def validate_configuration() -> None:
-    """Prüft die gewählte Anwendungskonfiguration."""
+    """Prüft die Anwendungskonfiguration."""
 
     if LLM_PROVIDER not in SUPPORTED_LLM_PROVIDERS:
         supported_values = ", ".join(
@@ -141,15 +144,6 @@ def validate_configuration() -> None:
     if not GEMINI_MODEL:
         raise ValueError(
             "GEMINI_MODEL darf nicht leer sein."
-        )
-
-    if (
-        LLM_PROVIDER == "gemini"
-        and not GEMINI_API_KEY
-    ):
-        raise ValueError(
-            "Für den Gemini-Betrieb fehlt "
-            "GEMINI_API_KEY."
         )
 
 

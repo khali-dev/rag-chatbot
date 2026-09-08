@@ -13,7 +13,7 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Lokale Umgebungsvariablen und Geheimnisse
+# Umgebungsvariablen und Geheimnisse
 .env
 .env.local
 .streamlit/secrets.toml
@@ -47,3 +47,8 @@ desktop.ini
 *.tmp
 *.temp
 ~$*
+
+# Lokale Sicherungsarchive
+*.zip
+*.7z
+*.rar

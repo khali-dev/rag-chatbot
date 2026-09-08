@@ -19,6 +19,7 @@ from src.config import (
     validate_configuration,
 )
 from src.file_security import validate_uploaded_file
+from src.llm import generate_answer
 from src.rag_pipeline import (
     IndexingResult,
     RAGPipeline,
@@ -29,7 +30,6 @@ from src.vector_store import VectorStore
 
 st.set_page_config(
     page_title="RAG Document Assistant",
-    page_icon="📚",
     layout="wide",
 )
 
@@ -74,6 +74,42 @@ def initialize_session_state() -> None:
             uuid4().hex
         )
 
+    if "gemini_api_key" not in st.session_state:
+        st.session_state.gemini_api_key = ""
+
+
+def get_session_api_key() -> str:
+    """Gibt den API-Schlüssel der aktuellen Sitzung zurück."""
+
+    api_key = st.session_state.get(
+        "gemini_api_key",
+        "",
+    )
+
+    if not isinstance(api_key, str):
+        return ""
+
+    return api_key.strip()
+
+
+def has_session_api_key() -> bool:
+    """Prüft, ob ein Sitzungsschlüssel vorhanden ist."""
+
+    return bool(get_session_api_key())
+
+
+def generate_session_answer(
+    question: str,
+    context: str,
+) -> str:
+    """Verwendet den API-Schlüssel des Besuchers."""
+
+    return generate_answer(
+        question=question,
+        context=context,
+        api_key=get_session_api_key(),
+    )
+
 
 @st.cache_resource(show_spinner=False)
 def get_local_pipeline() -> RAGPipeline:
@@ -101,7 +137,8 @@ def get_cloud_pipeline() -> RAGPipeline:
 
         st.session_state.cloud_pipeline = (
             RAGPipeline(
-                vector_store=vector_store
+                vector_store=vector_store,
+                answer_generator=generate_session_answer,
             )
         )
 
@@ -109,7 +146,7 @@ def get_cloud_pipeline() -> RAGPipeline:
 
 
 def get_pipeline() -> RAGPipeline:
-    """Gibt die passende lokale oder Cloud-Pipeline zurück."""
+    """Gibt die passende Pipeline zurück."""
 
     if is_cloud_mode():
         return get_cloud_pipeline()
@@ -150,7 +187,7 @@ def index_uploaded_files(
     pipeline: RAGPipeline,
     uploaded_files: list[Any],
 ) -> IndexingResult:
-    """Indexiert Uploads dauerhaft lokal oder temporär in der Cloud."""
+    """Indexiert Uploads lokal oder temporär."""
 
     if is_cloud_mode():
         with TemporaryDirectory(
@@ -282,18 +319,18 @@ def render_indexing_result(
 
 
 def render_cloud_notice() -> None:
-    """Zeigt den Datenschutzhinweis der Cloud-Version."""
+    """Zeigt den Hinweis für die öffentliche App."""
 
     if not is_cloud_mode():
         return
 
     st.info(
-        "Öffentliche Demo: Hochgeladene Dokumente "
-        "werden nur für diese Sitzung verarbeitet. "
-        "Für die Antwort werden relevante "
-        "Textausschnitte an die Gemini API "
-        "übermittelt. Lade keine vertraulichen "
-        "oder personenbezogenen Dokumente hoch."
+        "Öffentliche Demo: Dokumente und API-Schlüssel "
+        "werden nur innerhalb der aktuellen Sitzung "
+        "verwendet. Relevante Textausschnitte werden "
+        "zur Beantwortung an die Gemini API übertragen. "
+        "Lade keine vertraulichen oder "
+        "personenbezogenen Dokumente hoch."
     )
 
 
@@ -302,6 +339,19 @@ def reset_chat_history() -> None:
 
     st.session_state.messages = []
     st.rerun()
+
+
+def reset_cloud_session() -> None:
+    """Löscht Schlüssel, Dokumentindex und Chat."""
+
+    st.session_state.gemini_api_key = ""
+    st.session_state.messages = []
+    st.session_state.last_indexing_result = None
+    st.session_state.questions_asked = 0
+    st.session_state.session_identifier = uuid4().hex
+
+    if "cloud_pipeline" in st.session_state:
+        del st.session_state.cloud_pipeline
 
 
 initialize_application()
@@ -318,6 +368,50 @@ else:
 
 
 with st.sidebar:
+    if is_cloud_mode():
+        st.header("Gemini-Zugang")
+
+        st.write(
+            "Gib deinen eigenen Gemini-API-Schlüssel "
+            "ein. Er wird nur für deine aktuelle "
+            "Sitzung verwendet."
+        )
+
+        st.markdown(
+            "[API-Schlüssel in Google AI Studio "
+            "erstellen](https://aistudio.google.com/apikey)"
+        )
+
+        st.text_input(
+            "Gemini-API-Schlüssel",
+            type="password",
+            key="gemini_api_key",
+            placeholder="API-Schlüssel eingeben",
+            help=(
+                "Der Schlüssel wird im Sitzungszustand "
+                "verwendet und nicht in ChromaDB oder "
+                "einer Datei gespeichert."
+            ),
+        )
+
+        if has_session_api_key():
+            st.success(
+                "API-Schlüssel wurde eingegeben."
+            )
+        else:
+            st.warning(
+                "Für Antworten wird ein eigener "
+                "Gemini-API-Schlüssel benötigt."
+            )
+
+        st.button(
+            "Sitzung und API-Schlüssel löschen",
+            on_click=reset_cloud_session,
+            use_container_width=True,
+        )
+
+        st.divider()
+
     st.header("Dokumente")
 
     st.write(
@@ -445,7 +539,7 @@ with st.sidebar:
         )
 
 
-st.title("📚 RAG Document Assistant")
+st.title("RAG Document Assistant")
 
 st.write(
     "Stelle Fragen zu deinen indexierten "
@@ -456,6 +550,11 @@ render_cloud_notice()
 
 stored_chunks = (
     pipeline.vector_store.count()
+)
+
+api_key_missing = (
+    is_cloud_mode()
+    and not has_session_api_key()
 )
 
 question_limit_reached = (
@@ -476,11 +575,17 @@ else:
         f"{stored_chunks} Chunks."
     )
 
+if api_key_missing:
+    st.warning(
+        "Gib in der Seitenleiste deinen eigenen "
+        "Gemini-API-Schlüssel ein, um Fragen "
+        "stellen zu können."
+    )
+
 if question_limit_reached:
     st.warning(
         "Das Fragenlimit dieser Sitzung wurde "
-        "erreicht. Starte für weitere Fragen "
-        "eine neue Browsersitzung."
+        "erreicht."
     )
 
 
@@ -491,6 +596,7 @@ question = st.chat_input(
     "Stelle eine Frage zu deinen Dokumenten ...",
     disabled=(
         stored_chunks == 0
+        or api_key_missing
         or question_limit_reached
     ),
 )
