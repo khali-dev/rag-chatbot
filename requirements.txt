@@ -3,6 +3,7 @@ chromadb
 sentence-transformers
 PyMuPDF
 ollama
+google-genai
 python-dotenv
 pytest
 numpy

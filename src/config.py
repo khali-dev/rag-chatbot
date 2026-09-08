@@ -7,6 +7,32 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def read_positive_integer(
+    variable_name: str,
+    default: int,
+) -> int:
+    """Liest eine positive Ganzzahl aus der Umgebung."""
+
+    raw_value = os.getenv(
+        variable_name,
+        str(default),
+    ).strip()
+
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{variable_name} muss eine Ganzzahl sein."
+        ) from exc
+
+    if value <= 0:
+        raise ValueError(
+            f"{variable_name} muss größer als 0 sein."
+        )
+
+    return value
+
+
 # Hauptverzeichnis des Projekts
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -19,8 +45,36 @@ EVALUATION_DIR = DATA_DIR / "evaluation"
 # ChromaDB
 CHROMA_COLLECTION_NAME = "rag_documents"
 
+# Auswahl des Sprachmodell-Anbieters:
+# ollama = lokaler Betrieb
+# gemini = Cloud-Betrieb
+LLM_PROVIDER = (
+    os.getenv("LLM_PROVIDER", "ollama")
+    .strip()
+    .casefold()
+)
+
+SUPPORTED_LLM_PROVIDERS = {
+    "ollama",
+    "gemini",
+}
+
 # Lokales Sprachmodell
-OLLAMA_MODEL = "qwen3:4b"
+OLLAMA_MODEL = os.getenv(
+    "OLLAMA_MODEL",
+    "qwen3:4b",
+).strip()
+
+# Cloud-Sprachmodell
+GEMINI_MODEL = os.getenv(
+    "GEMINI_MODEL",
+    "gemini-2.5-flash-lite",
+).strip()
+
+GEMINI_API_KEY = os.getenv(
+    "GEMINI_API_KEY",
+    "",
+).strip()
 
 # Einstellungen für die Antwortgenerierung
 LLM_TEMPERATURE = 0.1
@@ -50,6 +104,12 @@ MAX_CONTEXT_CHARS = 4000
 # Datei-Upload
 MAX_UPLOAD_SIZE_MB = 20
 
+# Schutz des kostenlosen Cloud-Kontingents
+MAX_QUESTIONS_PER_SESSION = read_positive_integer(
+    "MAX_QUESTIONS_PER_SESSION",
+    20,
+)
+
 # Technische Fehlerdetails
 DEBUG_MODE = (
     os.getenv("RAG_DEBUG", "false")
@@ -57,6 +117,46 @@ DEBUG_MODE = (
     .casefold()
     in {"1", "true", "yes", "ja"}
 )
+
+
+def validate_configuration() -> None:
+    """Prüft die gewählte Anwendungskonfiguration."""
+
+    if LLM_PROVIDER not in SUPPORTED_LLM_PROVIDERS:
+        supported_values = ", ".join(
+            sorted(SUPPORTED_LLM_PROVIDERS)
+        )
+
+        raise ValueError(
+            "Unbekannter LLM_PROVIDER "
+            f"'{LLM_PROVIDER}'. Erlaubt sind: "
+            f"{supported_values}."
+        )
+
+    if not OLLAMA_MODEL:
+        raise ValueError(
+            "OLLAMA_MODEL darf nicht leer sein."
+        )
+
+    if not GEMINI_MODEL:
+        raise ValueError(
+            "GEMINI_MODEL darf nicht leer sein."
+        )
+
+    if (
+        LLM_PROVIDER == "gemini"
+        and not GEMINI_API_KEY
+    ):
+        raise ValueError(
+            "Für den Gemini-Betrieb fehlt "
+            "GEMINI_API_KEY."
+        )
+
+
+def is_cloud_mode() -> bool:
+    """Gibt an, ob der Gemini-Cloudbetrieb aktiv ist."""
+
+    return LLM_PROVIDER == "gemini"
 
 
 def create_data_directories() -> None:

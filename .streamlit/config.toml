@@ -1,7 +1,6 @@
 [server]
-address = "127.0.0.1"
-maxUploadSize = 20
 headless = true
+maxUploadSize = 20
 
 [client]
 showErrorDetails = "none"

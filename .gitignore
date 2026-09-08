@@ -1,34 +1,49 @@
-# Virtuelle Python-Umgebung
+# Virtuelle Python-Umgebungen
 .venv/
+venv/
+env/
 
 # Python-Zwischendateien
 __pycache__/
 *.py[cod]
+*$py.class
 
-# Tests
+# Test- und Analyse-Zwischendaten
 .pytest_cache/
 .coverage
 htmlcov/
 
-# Umgebungsvariablen und Geheimnisse
+# Lokale Umgebungsvariablen und Geheimnisse
 .env
+.env.local
 .streamlit/secrets.toml
-
-# VS Code
-.vscode/
 
 # Lokale Dokumente
 data/documents/*
+!data/documents/.gitkeep
 
 # Lokale ChromaDB
 data/chroma/*
+!data/chroma/.gitkeep
 
-# Lokale Evaluationsberichte
-data/evaluation/results_*.csv
+# Evaluationsergebnisse
+data/evaluation/*
+!data/evaluation/.gitkeep
 
-# Protokolldateien
+# Protokolle
 *.log
+logs/
+
+# Entwicklungsumgebungen
+.vscode/
+.idea/
 
 # Betriebssystemdateien
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Temporäre Dateien
+*.tmp
+*.temp
+~$*

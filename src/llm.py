@@ -2,13 +2,19 @@ import re
 from typing import Any
 
 import ollama
+from google import genai
+from google.genai import types
 
 from src.config import (
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
     LLM_NUM_CTX,
+    LLM_PROVIDER,
     LLM_TEMPERATURE,
     OLLAMA_KEEP_ALIVE,
     OLLAMA_MODEL,
     OLLAMA_NUM_GPU_LAYERS,
+    validate_configuration,
 )
 
 
@@ -38,11 +44,11 @@ Halte dich an folgende Regeln:
 """.strip()
 
 
-def build_messages(
+def build_user_prompt(
     question: str,
     context: str,
-) -> list[dict[str, str]]:
-    """Erstellt die Nachrichten für das Sprachmodell."""
+) -> str:
+    """Erstellt den Benutzer-Prompt für beide Anbieter."""
 
     cleaned_question = question.strip()
     cleaned_context = context.strip()
@@ -57,7 +63,7 @@ def build_messages(
             "Der Dokumentkontext darf nicht leer sein."
         )
 
-    user_prompt = f"""
+    return f"""
 DOKUMENTKONTEXT:
 
 {cleaned_context}
@@ -67,8 +73,21 @@ FRAGE:
 {cleaned_question}
 
 Beantworte die Frage ausschließlich anhand des
-Dokumentkontexts. Gib nur die fertige Antwort aus.
+Dokumentkontexts. Antworte auf Deutsch und gib nur
+die fertige Antwort aus.
 """.strip()
+
+
+def build_messages(
+    question: str,
+    context: str,
+) -> list[dict[str, str]]:
+    """Erstellt die Nachrichten für Ollama."""
+
+    user_prompt = build_user_prompt(
+        question=question,
+        context=context,
+    )
 
     return [
         {
@@ -121,10 +140,10 @@ def remove_thinking_content(
     return cleaned_content.strip()
 
 
-def extract_response_content(
+def extract_ollama_response_content(
     response: Any,
 ) -> str:
-    """Liest ausschließlich die endgültige Antwort."""
+    """Liest die endgültige Ollama-Antwort."""
 
     if isinstance(response, dict):
         message = response.get("message")
@@ -163,23 +182,43 @@ def extract_response_content(
     return cleaned_content
 
 
-def generate_answer(
+def extract_gemini_response_content(
+    response: Any,
+) -> str:
+    """Liest die endgültige Gemini-Antwort."""
+
+    content = getattr(
+        response,
+        "text",
+        None,
+    )
+
+    if not isinstance(content, str):
+        raise RuntimeError(
+            "Gemini hat keinen gültigen "
+            "Antworttext zurückgegeben."
+        )
+
+    cleaned_content = remove_thinking_content(
+        content
+    )
+
+    if not cleaned_content:
+        raise RuntimeError(
+            "Gemini hat keinen endgültigen "
+            "Antworttext zurückgegeben."
+        )
+
+    return cleaned_content
+
+
+def generate_ollama_answer(
     question: str,
     context: str,
-    model: str = OLLAMA_MODEL,
-    temperature: float = LLM_TEMPERATURE,
+    model: str,
+    temperature: float,
 ) -> str:
-    """Erzeugt mit Ollama eine RAG-Antwort."""
-
-    if not model.strip():
-        raise ValueError(
-            "Der Modellname darf nicht leer sein."
-        )
-
-    if temperature < 0:
-        raise ValueError(
-            "Die Temperatur darf nicht negativ sein."
-        )
+    """Erzeugt eine Antwort mit dem lokalen Ollama-Modell."""
 
     messages = build_messages(
         question=question,
@@ -198,7 +237,6 @@ def generate_answer(
                 "num_ctx": LLM_NUM_CTX,
                 "num_gpu": OLLAMA_NUM_GPU_LAYERS,
             },
-            
         )
 
     except ConnectionError as exc:
@@ -209,8 +247,108 @@ def generate_answer(
 
     except ollama.ResponseError as exc:
         raise RuntimeError(
-            "Ollama konnte keine Antwort erzeugen: "
-            f"{exc}"
+            "Ollama konnte keine Antwort erzeugen."
         ) from exc
 
-    return extract_response_content(response)
+    return extract_ollama_response_content(
+        response
+    )
+
+
+def generate_gemini_answer(
+    question: str,
+    context: str,
+    model: str,
+    temperature: float,
+) -> str:
+    """Erzeugt eine Antwort über die Gemini API."""
+
+    if not GEMINI_API_KEY:
+        raise RuntimeError(
+            "Der Gemini-API-Schlüssel fehlt. "
+            "Setze GEMINI_API_KEY in der Umgebung."
+        )
+
+    user_prompt = build_user_prompt(
+        question=question,
+        context=context,
+    )
+
+    try:
+        client = genai.Client(
+            api_key=GEMINI_API_KEY
+        )
+
+        response = client.models.generate_content(
+            model=model,
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=temperature,
+            ),
+        )
+
+    except Exception as exc:
+        raise RuntimeError(
+            "Gemini konnte keine Antwort erzeugen. "
+            "Prüfe den API-Schlüssel, die "
+            "Internetverbindung und das kostenlose "
+            "API-Kontingent."
+        ) from exc
+
+    return extract_gemini_response_content(
+        response
+    )
+
+
+def generate_answer(
+    question: str,
+    context: str,
+    model: str | None = None,
+    temperature: float = LLM_TEMPERATURE,
+) -> str:
+    """Erzeugt eine Antwort mit dem gewählten Anbieter."""
+
+    validate_configuration()
+
+    if temperature < 0:
+        raise ValueError(
+            "Die Temperatur darf nicht negativ sein."
+        )
+
+    if LLM_PROVIDER == "ollama":
+        selected_model = model or OLLAMA_MODEL
+
+        if not selected_model.strip():
+            raise ValueError(
+                "Der Ollama-Modellname darf "
+                "nicht leer sein."
+            )
+
+        return generate_ollama_answer(
+            question=question,
+            context=context,
+            model=selected_model,
+            temperature=temperature,
+        )
+
+    if LLM_PROVIDER == "gemini":
+        selected_model = model or GEMINI_MODEL
+
+        if not selected_model.strip():
+            raise ValueError(
+                "Der Gemini-Modellname darf "
+                "nicht leer sein."
+            )
+
+        return generate_gemini_answer(
+            question=question,
+            context=context,
+            model=selected_model,
+            temperature=temperature,
+        )
+
+    raise RuntimeError(
+        f"Nicht unterstützter LLM-Anbieter: "
+        f"{LLM_PROVIDER}"
+    )
