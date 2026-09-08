@@ -44,11 +44,30 @@ Halte dich an folgende Regeln:
 """.strip()
 
 
+GENERAL_KNOWLEDGE_SYSTEM_PROMPT = """
+Du bist ein hilfreicher allgemeiner Wissensassistent.
+
+Halte dich an folgende Regeln:
+
+1. Beantworte die Frage anhand deines allgemeinen
+   Wissens.
+2. Antworte klar, präzise und auf Deutsch.
+3. Erfinde keine Dokumentquellen.
+4. Verwende keine Quellenmarkierungen wie
+   [Quelle 1].
+5. Wenn du bei einer Aussage unsicher bist, sage
+   das ausdrücklich.
+6. Gib ausschließlich die fertige Antwort aus.
+7. Beschreibe nicht deine Analyse, Überlegungen oder
+   Vorgehensweise.
+""".strip()
+
+
 def build_user_prompt(
     question: str,
     context: str,
 ) -> str:
-    """Erstellt den Benutzer-Prompt für beide Anbieter."""
+    """Erstellt den Prompt für eine Dokumentantwort."""
 
     cleaned_question = question.strip()
     cleaned_context = context.strip()
@@ -78,11 +97,34 @@ die fertige Antwort aus.
 """.strip()
 
 
+def build_general_user_prompt(
+    question: str,
+) -> str:
+    """Erstellt den Prompt für allgemeines Wissen."""
+
+    cleaned_question = question.strip()
+
+    if not cleaned_question:
+        raise ValueError(
+            "Die Frage darf nicht leer sein."
+        )
+
+    return f"""
+FRAGE:
+
+{cleaned_question}
+
+Beantworte die Frage anhand deines allgemeinen
+Wissens. Erfinde keine Dokumentquellen und verwende
+keine Quellenmarkierungen wie [Quelle 1].
+""".strip()
+
+
 def build_messages(
     question: str,
     context: str,
 ) -> list[dict[str, str]]:
-    """Erstellt die Nachrichten für Ollama."""
+    """Erstellt die Dokumentnachrichten für Ollama."""
 
     user_prompt = build_user_prompt(
         question=question,
@@ -93,6 +135,27 @@ def build_messages(
         {
             "role": "system",
             "content": SYSTEM_PROMPT,
+        },
+        {
+            "role": "user",
+            "content": user_prompt,
+        },
+    ]
+
+
+def build_general_messages(
+    question: str,
+) -> list[dict[str, str]]:
+    """Erstellt allgemeine Nachrichten für Ollama."""
+
+    user_prompt = build_general_user_prompt(
+        question
+    )
+
+    return [
+        {
+            "role": "system",
+            "content": GENERAL_KNOWLEDGE_SYSTEM_PROMPT,
         },
         {
             "role": "user",
@@ -134,6 +197,21 @@ def remove_thinking_content(
         r"</?think\b[^>]*>",
         "",
         cleaned_content,
+        flags=re.IGNORECASE,
+    )
+
+    return cleaned_content.strip()
+
+
+def remove_document_source_markers(
+    content: str,
+) -> str:
+    """Entfernt Quellenmarkierungen aus allgemeinen Antworten."""
+
+    cleaned_content = re.sub(
+        r"\s*\[Quelle\s+\d+\]",
+        "",
+        content,
         flags=re.IGNORECASE,
     )
 
@@ -212,18 +290,31 @@ def extract_gemini_response_content(
     return cleaned_content
 
 
-def generate_ollama_answer(
-    question: str,
-    context: str,
+def resolve_gemini_api_key(
+    api_key: str | None,
+) -> str:
+    """Bestimmt den zu verwendenden Gemini-Schlüssel."""
+
+    if api_key is None:
+        selected_api_key = GEMINI_API_KEY
+    else:
+        selected_api_key = api_key.strip()
+
+    if not selected_api_key:
+        raise RuntimeError(
+            "Es wurde kein Gemini-API-Schlüssel "
+            "für diese Sitzung angegeben."
+        )
+
+    return selected_api_key
+
+
+def call_ollama(
+    messages: list[dict[str, str]],
     model: str,
     temperature: float,
 ) -> str:
-    """Erzeugt eine Antwort mit Ollama."""
-
-    messages = build_messages(
-        question=question,
-        context=context,
-    )
+    """Führt einen Ollama-Aufruf aus."""
 
     try:
         response = ollama.chat(
@@ -255,29 +346,17 @@ def generate_ollama_answer(
     )
 
 
-def generate_gemini_answer(
-    question: str,
-    context: str,
+def call_gemini(
+    system_prompt: str,
+    user_prompt: str,
     model: str,
     temperature: float,
-    api_key: str | None = None,
+    api_key: str | None,
 ) -> str:
-    """Erzeugt eine Antwort über die Gemini API."""
+    """Führt einen Gemini-Aufruf aus."""
 
-    if api_key is None:
-        selected_api_key = GEMINI_API_KEY
-    else:
-        selected_api_key = api_key.strip()
-
-    if not selected_api_key:
-        raise RuntimeError(
-            "Es wurde kein Gemini-API-Schlüssel "
-            "für diese Sitzung angegeben."
-        )
-
-    user_prompt = build_user_prompt(
-        question=question,
-        context=context,
+    selected_api_key = resolve_gemini_api_key(
+        api_key
     )
 
     try:
@@ -289,7 +368,7 @@ def generate_gemini_answer(
             model=model,
             contents=user_prompt,
             config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=system_prompt,
                 temperature=temperature,
             ),
         )
@@ -307,6 +386,49 @@ def generate_gemini_answer(
     )
 
 
+def generate_ollama_answer(
+    question: str,
+    context: str,
+    model: str,
+    temperature: float,
+) -> str:
+    """Erzeugt eine Dokumentantwort mit Ollama."""
+
+    messages = build_messages(
+        question=question,
+        context=context,
+    )
+
+    return call_ollama(
+        messages=messages,
+        model=model,
+        temperature=temperature,
+    )
+
+
+def generate_gemini_answer(
+    question: str,
+    context: str,
+    model: str,
+    temperature: float,
+    api_key: str | None = None,
+) -> str:
+    """Erzeugt eine Dokumentantwort mit Gemini."""
+
+    user_prompt = build_user_prompt(
+        question=question,
+        context=context,
+    )
+
+    return call_gemini(
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        model=model,
+        temperature=temperature,
+        api_key=api_key,
+    )
+
+
 def generate_answer(
     question: str,
     context: str,
@@ -314,7 +436,7 @@ def generate_answer(
     temperature: float = LLM_TEMPERATURE,
     api_key: str | None = None,
 ) -> str:
-    """Erzeugt eine Antwort mit dem gewählten Anbieter."""
+    """Erzeugt eine dokumentbasierte Antwort."""
 
     validate_configuration()
 
@@ -359,4 +481,68 @@ def generate_answer(
     raise RuntimeError(
         f"Nicht unterstützter LLM-Anbieter: "
         f"{LLM_PROVIDER}"
+    )
+
+
+def generate_general_answer(
+    question: str,
+    model: str | None = None,
+    temperature: float = LLM_TEMPERATURE,
+    api_key: str | None = None,
+) -> str:
+    """Erzeugt eine Antwort anhand allgemeinen Wissens."""
+
+    validate_configuration()
+
+    if temperature < 0:
+        raise ValueError(
+            "Die Temperatur darf nicht negativ sein."
+        )
+
+    if LLM_PROVIDER == "ollama":
+        selected_model = model or OLLAMA_MODEL
+
+        if not selected_model.strip():
+            raise ValueError(
+                "Der Ollama-Modellname darf "
+                "nicht leer sein."
+            )
+
+        answer = call_ollama(
+            messages=build_general_messages(
+                question
+            ),
+            model=selected_model,
+            temperature=temperature,
+        )
+
+    elif LLM_PROVIDER == "gemini":
+        selected_model = model or GEMINI_MODEL
+
+        if not selected_model.strip():
+            raise ValueError(
+                "Der Gemini-Modellname darf "
+                "nicht leer sein."
+            )
+
+        answer = call_gemini(
+            system_prompt=(
+                GENERAL_KNOWLEDGE_SYSTEM_PROMPT
+            ),
+            user_prompt=build_general_user_prompt(
+                question
+            ),
+            model=selected_model,
+            temperature=temperature,
+            api_key=api_key,
+        )
+
+    else:
+        raise RuntimeError(
+            f"Nicht unterstützter LLM-Anbieter: "
+            f"{LLM_PROVIDER}"
+        )
+
+    return remove_document_source_markers(
+        answer
     )

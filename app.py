@@ -18,8 +18,12 @@ from src.config import (
     validate_configuration,
 )
 from src.file_security import validate_uploaded_file
-from src.llm import generate_answer
+from src.llm import (
+    generate_answer,
+    generate_general_answer,
+)
 from src.rag_pipeline import (
+    GENERAL_KNOWLEDGE_WARNING,
     IndexingResult,
     RAGPipeline,
     RAGSource,
@@ -73,6 +77,9 @@ def initialize_session_state() -> None:
     if "gemini_api_key" not in st.session_state:
         st.session_state.gemini_api_key = ""
 
+    if "allow_general_knowledge" not in st.session_state:
+        st.session_state.allow_general_knowledge = False
+
 
 def get_session_api_key() -> str:
     """Gibt den API-Schlüssel der Sitzung zurück."""
@@ -94,15 +101,37 @@ def has_session_api_key() -> bool:
     return bool(get_session_api_key())
 
 
+def general_knowledge_enabled() -> bool:
+    """Prüft, ob allgemeines Wissen erlaubt ist."""
+
+    return bool(
+        st.session_state.get(
+            "allow_general_knowledge",
+            False,
+        )
+    )
+
+
 def generate_session_answer(
     question: str,
     context: str,
 ) -> str:
-    """Verwendet den API-Schlüssel des Besuchers."""
+    """Erzeugt eine Dokumentantwort für die Sitzung."""
 
     return generate_answer(
         question=question,
         context=context,
+        api_key=get_session_api_key(),
+    )
+
+
+def generate_session_general_answer(
+    question: str,
+) -> str:
+    """Erzeugt eine allgemeine Antwort für die Sitzung."""
+
+    return generate_general_answer(
+        question=question,
         api_key=get_session_api_key(),
     )
 
@@ -135,6 +164,9 @@ def get_cloud_pipeline() -> RAGPipeline:
             RAGPipeline(
                 vector_store=vector_store,
                 answer_generator=generate_session_answer,
+                fallback_answer_generator=(
+                    generate_session_general_answer
+                ),
             )
         )
 
@@ -278,6 +310,24 @@ def render_sources(
                 st.divider()
 
 
+def render_answer(
+    content: str,
+    answer_mode: str,
+    sources: tuple[RAGSource, ...],
+) -> None:
+    """Zeigt Antwort, Warnung und Quellen."""
+
+    if answer_mode == "general_knowledge":
+        st.warning(
+            GENERAL_KNOWLEDGE_WARNING
+        )
+
+    st.markdown(content)
+
+    if answer_mode == "documents":
+        render_sources(sources)
+
+
 def render_chat_history() -> None:
     """Zeigt den bisherigen Chatverlauf."""
 
@@ -285,16 +335,21 @@ def render_chat_history() -> None:
         with st.chat_message(
             message["role"]
         ):
-            st.markdown(
-                message["content"]
-            )
-
             if message["role"] == "assistant":
-                render_sources(
-                    message.get(
+                render_answer(
+                    content=message["content"],
+                    answer_mode=message.get(
+                        "answer_mode",
+                        "documents",
+                    ),
+                    sources=message.get(
                         "sources",
                         (),
-                    )
+                    ),
+                )
+            else:
+                st.markdown(
+                    message["content"]
                 )
 
 
@@ -341,6 +396,7 @@ def reset_cloud_session() -> None:
     """Löscht Schlüssel, Dokumentindex und Chat."""
 
     st.session_state.gemini_api_key = ""
+    st.session_state.allow_general_knowledge = False
     st.session_state.messages = []
     st.session_state.last_indexing_result = None
     st.session_state.session_identifier = uuid4().hex
@@ -407,6 +463,33 @@ with st.sidebar:
 
         st.divider()
 
+    st.header("Antwortmodus")
+
+    st.toggle(
+        "Allgemeines Modellwissen zulassen",
+        key="allow_general_knowledge",
+        help=(
+            "Wenn die Dokumente keine Antwort "
+            "enthalten, darf das Modell anhand "
+            "seines allgemeinen Wissens antworten. "
+            "Solche Antworten werden als ohne "
+            "Gewähr gekennzeichnet."
+        ),
+    )
+
+    if general_knowledge_enabled():
+        st.caption(
+            "Allgemeines Wissen ist aktiviert. "
+            "Antworten ohne Dokumentquellen werden "
+            "deutlich gekennzeichnet."
+        )
+    else:
+        st.caption(
+            "Es werden ausschließlich Antworten "
+            "aus Dokumentquellen erzeugt."
+        )
+
+    st.divider()
     st.header("Dokumente")
 
     st.write(
@@ -540,12 +623,24 @@ api_key_missing = (
     and not has_session_api_key()
 )
 
+knowledge_available = (
+    stored_chunks > 0
+    or general_knowledge_enabled()
+)
+
 if stored_chunks == 0:
-    st.warning(
-        "Es sind noch keine Dokumente indexiert. "
-        "Lade zuerst ein Dokument über die "
-        "Seitenleiste hoch."
-    )
+    if general_knowledge_enabled():
+        st.info(
+            "Es sind keine Dokumente indexiert. "
+            "Fragen werden momentan anhand des "
+            "allgemeinen Modellwissens beantwortet."
+        )
+    else:
+        st.warning(
+            "Es sind noch keine Dokumente indexiert. "
+            "Lade zuerst ein Dokument hoch oder "
+            "aktiviere allgemeines Modellwissen."
+        )
 else:
     st.success(
         f"Die Wissensdatenbank enthält "
@@ -564,9 +659,9 @@ render_chat_history()
 
 
 question = st.chat_input(
-    "Stelle eine Frage zu deinen Dokumenten ...",
+    "Stelle eine Frage ...",
     disabled=(
-        stored_chunks == 0
+        not knowledge_available
         or api_key_missing
     ),
 )
@@ -590,18 +685,27 @@ if question:
             ):
                 response = (
                     pipeline.answer_question(
-                        question
+                        question=question,
+                        allow_general_knowledge=(
+                            general_knowledge_enabled()
+                        ),
                     )
                 )
 
-            st.markdown(response.answer)
-            render_sources(response.sources)
+            render_answer(
+                content=response.answer,
+                answer_mode=response.answer_mode,
+                sources=response.sources,
+            )
 
             st.session_state.messages.append(
                 {
                     "role": "assistant",
                     "content": response.answer,
                     "sources": response.sources,
+                    "answer_mode": (
+                        response.answer_mode
+                    ),
                 }
             )
 
